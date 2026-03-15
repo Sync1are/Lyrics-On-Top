@@ -2,8 +2,8 @@ const axios = require('axios');
 const express = require('express');
 const { shell } = require('electron');
 
-const CLIENT_ID = '61aad8cea3f2456c8e89d57d9c5ddedb';
-const CLIENT_SECRET = '017e51c7cb2e4c54a17d68108e4d17c1';
+const CLIENT_ID = 'YOURE_SECRET_ID_HERE'; #get froim spotify developers portal
+const CLIENT_SECRET = 'YOUR_SECRET_ID_HERE';
 const REDIRECT_URI = 'http://127.0.0.1:8888/callback';
 const SCOPES = 'user-read-currently-playing user-read-playback-state';
 
