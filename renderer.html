@@ -56,6 +56,12 @@
       gap: 8px;
       z-index: 150;
       -webkit-app-region: no-drag;
+      opacity: 0;
+      transition: opacity 200ms ease;
+    }
+
+    body:hover #controls {
+      opacity: 1;
     }
 
     #controls button {
@@ -199,12 +205,73 @@
       transition: opacity 400ms ease;
     }
     #idle-msg.visible { opacity: 1; }
+
+    /* ── Album Cover ──────────────────────────────── */
+    #album-cover-container {
+      position: fixed;
+      display: none;
+      z-index: 50;
+      transition: all 300ms ease;
+    }
+    #album-cover-container.visible { display: block; }
+    #album-cover-container.left {
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    #album-cover-container.right {
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    #album-cover-container.background {
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.15;
+      filter: blur(20px);
+      z-index: 1;
+    }
+    #album-cover {
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+    }
+    #album-cover-container.background #album-cover {
+      width: 300px;
+      height: 300px;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    /* ── Progress Display ─────────────────────────── */
+    #progress-display {
+      position: fixed;
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--color-track);
+      letter-spacing: 0.03em;
+      opacity: 0;
+      transition: opacity 400ms ease;
+    }
+    #progress-display.visible { opacity: 1; }
+    #progress-display.bottom-left { bottom: 14px; left: 18px; }
+    #progress-display.bottom-center { bottom: 14px; left: 50%; transform: translateX(-50%); }
+    #progress-display.bottom-right { bottom: 14px; right: 18px; }
   </style>
 </head>
 <body>
   <div id="controls">
+    <button id="settings-btn" aria-label="Open settings">⚙️</button>
     <button id="lock-btn" aria-label="Toggle click-through">🔓</button>
     <button id="top-btn" aria-label="Toggle always on top">📌</button>
+  </div>
+
+  <!-- Album cover -->
+  <div id="album-cover-container">
+    <img id="album-cover" src="" alt="Album cover" />
   </div>
 
   <!-- Lyrics display (3-line) -->
@@ -225,6 +292,9 @@
   <!-- Track info ribbon -->
   <div id="track-info"></div>
 
+  <!-- Song progress -->
+  <div id="progress-display"></div>
+
   <script>
     const { ipcRenderer } = require('electron');
 
@@ -239,24 +309,164 @@
     const idleMsg      = document.getElementById('idle-msg');
     const lockBtn      = document.getElementById('lock-btn');
     const topBtn       = document.getElementById('top-btn');
+    const settingsBtn  = document.getElementById('settings-btn');
+    const albumCoverContainer = document.getElementById('album-cover-container');
+    const albumCoverImg = document.getElementById('album-cover');
+    const progressDisplay = document.getElementById('progress-display');
 
     let lastCurrentText = '';
     let isClickThrough = false;
     let isPinned = true;
     let vizRunning = false;
     let animFrameId = null;
+    let currentSettings = {};
+    let currentAlbumCover = null;
+    let currentDurationMs = 0;
+
+    // ── Settings Application ───────────────────────
+    function applySettings(settings) {
+      currentSettings = settings;
+      const theme = settings.themes?.[settings.theme] || {};
+      const anim = settings.animations?.[settings.animation?.style] || {};
+      const typo = settings.typography || {};
+      const display = settings.display || {};
+
+      // Apply theme colors
+      document.documentElement.style.setProperty('--color-current', theme.colorCurrent || '#fffaf0');
+      document.documentElement.style.setProperty('--color-faded', theme.colorFaded || 'rgba(255, 250, 240, 0.35)');
+      document.documentElement.style.setProperty('--color-accent', theme.colorAccent || '#d4a24e');
+      document.documentElement.style.setProperty('--color-accent-low', theme.colorAccentLow || 'rgba(212, 162, 78, 0.25)');
+      document.documentElement.style.setProperty('--color-track', theme.colorTrack || 'rgba(255, 250, 240, 0.5)');
+      document.documentElement.style.setProperty('--color-muted', theme.colorMuted || 'rgba(255, 250, 240, 0.18)');
+
+      // Apply animation
+      const duration = settings.animation?.duration || 420;
+      const easing = settings.animation?.easing || 'cubic-bezier(0.22, 1, 0.36, 1)';
+      document.documentElement.style.setProperty('--transition-lyrics', `${duration}ms ${easing}`);
+      
+      // Update keyframes if animation changed
+      if (anim.keyframes) {
+        updateAnimationKeyframes(anim.keyframes);
+      }
+
+      // Apply typography
+      lyricCurrent.style.fontFamily = `'${typo.currentFont || 'Playfair Display'}', Georgia, serif`;
+      lyricCurrent.style.fontSize = `${typo.currentSize || 32}px`;
+      lyricCurrent.style.fontWeight = typo.currentWeight || 500;
+      lyricPrev.style.fontFamily = `'${typo.contextFont || 'DM Sans'}', system-ui, sans-serif`;
+      lyricPrev.style.fontSize = `${typo.contextSize || 15}px`;
+      lyricNext.style.fontFamily = `'${typo.contextFont || 'DM Sans'}', system-ui, sans-serif`;
+      lyricNext.style.fontSize = `${typo.contextSize || 15}px`;
+
+      // Apply layout
+      updateLayout(display.layout || 'three-line');
+
+      // Apply window opacity
+      document.body.style.opacity = settings.window?.opacity || 1;
+
+      // Album cover
+      updateAlbumCoverDisplay();
+
+      // Progress display
+      updateProgressDisplay();
+    }
+
+    function updateAnimationKeyframes(keyframes) {
+      let styleEl = document.getElementById('dynamic-animation');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'dynamic-animation';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = `@keyframes lyricIn { ${keyframes} }`;
+    }
+
+    function updateLayout(layout) {
+      switch (layout) {
+        case 'single-line':
+          lyricPrev.style.display = 'none';
+          lyricNext.style.display = 'none';
+          break;
+        case 'two-line':
+          lyricPrev.style.display = 'none';
+          lyricNext.style.display = 'block';
+          break;
+        default: // three-line
+          lyricPrev.style.display = 'block';
+          lyricNext.style.display = 'block';
+      }
+    }
+
+    function updateAlbumCoverDisplay() {
+      const display = currentSettings.display || {};
+      if (display.showAlbumCover && currentAlbumCover) {
+        albumCoverImg.src = currentAlbumCover;
+        albumCoverImg.style.width = `${display.albumCoverSize || 80}px`;
+        albumCoverImg.style.height = `${display.albumCoverSize || 80}px`;
+        albumCoverContainer.className = `visible ${display.albumCoverPosition || 'left'}`;
+      } else {
+        albumCoverContainer.className = '';
+      }
+    }
+
+    function updateProgressDisplay() {
+      const display = currentSettings.display || {};
+      if (display.showProgress) {
+        progressDisplay.className = `visible ${display.progressPosition || 'bottom-right'}`;
+      } else {
+        progressDisplay.className = '';
+      }
+    }
+
+    function formatTime(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    function updateProgress(progressMs, durationMs) {
+      if (!currentSettings.display?.showProgress) return;
+      currentDurationMs = durationMs;
+      const format = currentSettings.display?.progressFormat || 'elapsed';
+      const elapsed = formatTime(progressMs);
+      const remaining = formatTime(durationMs - progressMs);
+      const total = formatTime(durationMs);
+
+      switch (format) {
+        case 'remaining':
+          progressDisplay.textContent = `-${remaining}`;
+          break;
+        case 'both':
+          progressDisplay.textContent = `${elapsed} / ${total}`;
+          break;
+        default: // elapsed
+          progressDisplay.textContent = elapsed;
+      }
+    }
 
     // ── UI Mode Switching ─────────────────────────
     function showLyrics() {
       lyricsBox.classList.remove('hidden');
-      vizBox.classList.remove('visible');
+      if (!currentSettings.display?.visualizerWithLyrics) {
+        vizBox.classList.remove('visible');
+        stopVisualizer();
+      } else {
+        vizBox.classList.add('visible');
+        vizBox.style.opacity = '0.3';
+        vizBox.style.position = 'absolute';
+        vizBox.style.zIndex = '1';
+        startVisualizer();
+      }
       idleMsg.classList.remove('visible');
-      stopVisualizer();
     }
 
     function showVisualizer() {
       lyricsBox.classList.add('hidden');
       vizBox.classList.add('visible');
+      vizBox.style.opacity = '1';
+      vizBox.style.position = 'relative';
+      vizBox.style.zIndex = '10';
       idleMsg.classList.remove('visible');
       startVisualizer();
     }
@@ -266,6 +476,8 @@
       vizBox.classList.remove('visible');
       idleMsg.classList.add('visible');
       trackInfo.classList.remove('visible');
+      albumCoverContainer.className = '';
+      progressDisplay.className = '';
       stopVisualizer();
     }
 
@@ -294,7 +506,7 @@
     }
 
     updateClickThroughState(false);
-    updateAlwaysOnTopState(true);
+    updateAlwaysOnTopState(false);
 
     lockBtn.addEventListener('click', () => {
       ipcRenderer.send('toggle-clickthrough');
@@ -304,12 +516,20 @@
       ipcRenderer.send('toggle-always-on-top');
     });
 
+    settingsBtn.addEventListener('click', () => {
+      ipcRenderer.send('open-settings');
+    });
+
     ipcRenderer.on('clickthrough-changed', (_e, enabled) => {
       updateClickThroughState(enabled);
     });
 
     ipcRenderer.on('always-on-top-changed', (_e, enabled) => {
       updateAlwaysOnTopState(enabled);
+    });
+
+    ipcRenderer.on('settings-updated', (_e, settings) => {
+      applySettings(settings);
     });
 
     ipcRenderer.on('lyric-update', (_e, { prev, current, next }) => {
@@ -331,10 +551,17 @@
       }
     });
 
-    ipcRenderer.on('track-change', (_e, { title, artist }) => {
+    ipcRenderer.on('track-change', (_e, { title, artist, albumCover, durationMs }) => {
       trackInfo.textContent = `${artist} — ${title}`;
       trackInfo.classList.add('visible');
       lastCurrentText = '';
+      currentAlbumCover = albumCover;
+      currentDurationMs = durationMs;
+      updateAlbumCoverDisplay();
+    });
+
+    ipcRenderer.on('progress-update', (_e, { progressMs, durationMs }) => {
+      updateProgress(progressMs, durationMs);
     });
 
     ipcRenderer.on('no-track', () => {

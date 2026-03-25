@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lyrics Overlay Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg-primary: #1a1a1f;
+      --bg-secondary: #25252b;
+      --bg-tertiary: #2d2d35;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a8;
+      --accent: #d4a24e;
+      --accent-hover: #e5b35f;
+      --border: #3a3a42;
+      --success: #4ade80;
+      --danger: #f87171;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Title bar */
+    .title-bar {
+      -webkit-app-region: drag;
+      height: 38px;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title-bar h1 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .title-bar-controls {
+      -webkit-app-region: no-drag;
+      display: flex;
+      gap: 8px;
+    }
+
+    .title-bar-controls button {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 150ms;
+    }
+
+    .title-bar-controls button:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .title-bar-controls .close:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    /* Main layout */
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 180px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-item {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 150ms;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-item:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .sidebar-item.active {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .sidebar-item .icon {
+      font-size: 16px;
+    }
+
+    /* Content area */
+    .content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    /* Form controls */
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .control-hint {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* Select */
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 150ms;
+    }
+
+    select:hover, select:focus {
+      border-color: var(--accent);
+    }
+
+    /* Range slider */
+    .range-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .range-container input[type="range"] {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--bg-tertiary);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .range-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 150ms;
+    }
+
+    .range-container input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .range-value {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 45px;
+      text-align: right;
+    }
+
+    /* Toggle switch */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+
+    .toggle-info {
+      flex: 1;
+    }
+
+    .toggle-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .toggle-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--bg-tertiary);
+      border-radius: 12px;
+      transition: background 200ms;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--text-secondary);
+      top: 3px;
+      left: 3px;
+      transition: transform 200ms, background 200ms;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--accent);
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(20px);
+      background: white;
+    }
+
+    /* Theme/Animation preset cards */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+
+    .preset-card {
+      padding: 14px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: var(--bg-tertiary);
+      cursor: pointer;
+      transition: all 150ms;
+      text-align: center;
+    }
+
+    .preset-card:hover {
+      border-color: var(--accent);
+    }
+
+    .preset-card.selected {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .preset-card .preview {
+      height: 40px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preset-card .name {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 150ms;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 12px 24px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-status {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-status .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="title-bar">
+    <h1>⚙️ Lyrics Overlay Settings</h1>
+    <div class="title-bar-controls">
+      <button class="minimize" onclick="minimizeWindow()">─</button>
+      <button class="close" onclick="closeWindow()">✕</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <nav class="sidebar">
+      <div class="sidebar-item active" data-tab="appearance">
+        <span class="icon">🎨</span> Appearance
+      </div>
+      <div class="sidebar-item" data-tab="animations">
+        <span class="icon">✨</span> Animations
+      </div>
+      <div class="sidebar-item" data-tab="display">
+        <span class="icon">📺</span> Display
+      </div>
+      <div class="sidebar-item" data-tab="typography">
+        <span class="icon">🔤</span> Typography
+      </div>
+      <div class="sidebar-item" data-tab="advanced">
+        <span class="icon">⚙️</span> Advanced
+      </div>
+    </nav>
+
+    <main class="content">
+      <!-- Appearance Tab -->
+      <div id="tab-appearance" class="tab-content active">
+        <div class="section">
+          <div class="section-title">Theme Presets</div>
+          <div class="preset-grid" id="theme-grid"></div>
+        </div>
+      </div>
+
+      <!-- Animations Tab -->
+      <div id="tab-animations" class="tab-content">
+        <div class="section">
+          <div class="section-title">Animation Style</div>
+          <div class="preset-grid" id="animation-grid"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Timing</div>
+          <div class="control-group">
+            <label class="control-label">Animation Duration</label>
+            <div class="range-container">
+              <input type="range" id="anim-duration" min="100" max="1000" step="10" />
+              <span class="range-value" id="anim-duration-val">420ms</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display Tab -->
+      <div id="tab-display" class="tab-content">
+        <div class="section">
+          <div class="section-title">Elements</div>
+          
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Show Album Cover</div>
+              <div class="toggle-desc">Display the current track's album artwork</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="show-album-cover" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row" id="album-cover-options" style="display: none; flex-direction: column; align-items: flex-start; gap: 10px;">
+            <div class="control-group" style="width: 100%;">
+              <label class="control-label">Cover Position</label>
+              <select id="album-cover-position">
+                <option value="left">Left of lyrics</option>
+                <option value="right">Right of lyrics</option>
+                <option value="background">Background (blurred)</option>
+              </select>
+            </div>
+            <div class="control-group" style="width: 100%;">
+              <label class="control-label">Cover Size</label>
+              <div class="range-container">
+                <input type="range" id="album-cover-size" min="40" max="150" step="5" />
+                <span class="range-value" id="album-cover-size-val">80px</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Show Song Progress</div>
+              <div class="toggle-desc">Display elapsed or remaining time</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="show-progress" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row" id="progress-options" style="display: none; flex-direction: column; align-items: flex-start; gap: 10px;">
+            <div class="control-group" style="width: 100%;">
+              <label class="control-label">Progress Format</label>
+              <select id="progress-format">
+                <option value="elapsed">Elapsed (1:23)</option>
+                <option value="remaining">Remaining (-2:34)</option>
+                <option value="both">Both (1:23 / 3:57)</option>
+              </select>
+            </div>
+            <div class="control-group" style="width: 100%;">
+              <label class="control-label">Position</label>
+              <select id="progress-position">
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-center">Bottom Center</option>
+                <option value="bottom-right">Bottom Right</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Visualizer with Lyrics</div>
+              <div class="toggle-desc">Show ambient visualizer in background while lyrics display</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="visualizer-with-lyrics" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Layout</div>
+          <div class="control-group">
+            <label class="control-label">Lyrics Display Mode</label>
+            <select id="layout-mode">
+              <option value="three-line">3-Line (Previous, Current, Next)</option>
+              <option value="single-line">Single Line (Current only)</option>
+              <option value="two-line">2-Line (Current, Next)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typography Tab -->
+      <div id="tab-typography" class="tab-content">
+        <div class="section">
+          <div class="section-title">Current Lyric Line</div>
+          <div class="control-group">
+            <label class="control-label">Font Family</label>
+            <select id="current-font">
+              <option value="Playfair Display">Playfair Display (Serif)</option>
+              <option value="DM Sans">DM Sans (Sans-serif)</option>
+              <option value="Georgia">Georgia (Serif)</option>
+              <option value="system-ui">System Default</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Font Size</label>
+            <div class="range-container">
+              <input type="range" id="current-size" min="18" max="56" step="1" />
+              <span class="range-value" id="current-size-val">32px</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Font Weight</label>
+            <select id="current-weight">
+              <option value="400">Regular (400)</option>
+              <option value="500">Medium (500)</option>
+              <option value="600">Semi-Bold (600)</option>
+              <option value="700">Bold (700)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Context Lines (Previous/Next)</div>
+          <div class="control-group">
+            <label class="control-label">Font Family</label>
+            <select id="context-font">
+              <option value="DM Sans">DM Sans (Sans-serif)</option>
+              <option value="Playfair Display">Playfair Display (Serif)</option>
+              <option value="Georgia">Georgia (Serif)</option>
+              <option value="system-ui">System Default</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Font Size</label>
+            <div class="range-container">
+              <input type="range" id="context-size" min="10" max="28" step="1" />
+              <span class="range-value" id="context-size-val">15px</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced Tab -->
+      <div id="tab-advanced" class="tab-content">
+        <div class="section">
+          <div class="section-title">Window</div>
+          <div class="control-group">
+            <label class="control-label">Window Opacity</label>
+            <div class="range-container">
+              <input type="range" id="window-opacity" min="0.3" max="1" step="0.05" />
+              <span class="range-value" id="window-opacity-val">100%</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Default Position</label>
+            <select id="window-position">
+              <option value="top-center">Top Center</option>
+              <option value="center">Center</option>
+              <option value="bottom-center">Bottom Center</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Reset</div>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+            Reset all settings to their default values. This cannot be undone.
+          </p>
+          <button class="btn btn-danger" onclick="resetSettings()">Reset All Settings</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="footer">
+    <div class="footer-status">
+      <span class="dot"></span>
+      <span>Changes saved automatically</span>
+    </div>
+    <button class="btn btn-secondary" onclick="closeWindow()">Close</button>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    let settings = {};
+
+    // Theme definitions for preview colors
+    const themePreviewColors = {
+      'warm-amber': '#d4a24e',
+      'cool-blue': '#4a9eff',
+      'neon-purple': '#b44aff',
+      'minimal-dark': '#888888',
+      'spotify-green': '#1db954',
+    };
+
+    const themeNames = {
+      'warm-amber': 'Warm Amber',
+      'cool-blue': 'Cool Blue',
+      'neon-purple': 'Neon Purple',
+      'minimal-dark': 'Minimal Dark',
+      'spotify-green': 'Spotify Green',
+    };
+
+    const animationNames = {
+      'fade-slide': 'Fade & Slide',
+      'fade': 'Simple Fade',
+      'slide-up': 'Slide Up',
+      'zoom': 'Zoom In',
+      'typewriter': 'Typewriter',
+    };
+
+    // Tab navigation
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        item.classList.add('active');
+        document.getElementById(`tab-${item.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    // Build theme grid
+    function buildThemeGrid() {
+      const grid = document.getElementById('theme-grid');
+      grid.innerHTML = '';
+      for (const [key, color] of Object.entries(themePreviewColors)) {
+        const card = document.createElement('div');
+        card.className = `preset-card ${settings.theme === key ? 'selected' : ''}`;
+        card.dataset.theme = key;
+        card.innerHTML = `
+          <div class="preview" style="background: ${color}20; border: 1px solid ${color};">
+            <span style="color: ${color}; font-size: 20px;">Aa</span>
+          </div>
+          <div class="name">${themeNames[key]}</div>
+        `;
+        card.addEventListener('click', () => selectTheme(key));
+        grid.appendChild(card);
+      }
+    }
+
+    // Build animation grid
+    function buildAnimationGrid() {
+      const grid = document.getElementById('animation-grid');
+      grid.innerHTML = '';
+      for (const [key, name] of Object.entries(animationNames)) {
+        const card = document.createElement('div');
+        card.className = `preset-card ${settings.animation?.style === key ? 'selected' : ''}`;
+        card.dataset.animation = key;
+        card.innerHTML = `
+          <div class="preview" style="background: var(--bg-primary);">
+            <span style="color: var(--accent); font-size: 14px;">✨</span>
+          </div>
+          <div class="name">${name}</div>
+        `;
+        card.addEventListener('click', () => selectAnimation(key));
+        grid.appendChild(card);
+      }
+    }
+
+    function selectTheme(key) {
+      settings.theme = key;
+      saveSettings();
+      buildThemeGrid();
+    }
+
+    function selectAnimation(key) {
+      settings.animation.style = key;
+      saveSettings();
+      buildAnimationGrid();
+    }
+
+    // Load settings from main process
+    function loadSettings() {
+      ipcRenderer.send('get-settings');
+    }
+
+    ipcRenderer.on('settings-data', (_e, data) => {
+      settings = data;
+      applySettingsToUI();
+    });
+
+    function applySettingsToUI() {
+      buildThemeGrid();
+      buildAnimationGrid();
+
+      // Animation duration
+      const animDuration = document.getElementById('anim-duration');
+      animDuration.value = settings.animation?.duration || 420;
+      document.getElementById('anim-duration-val').textContent = `${animDuration.value}ms`;
+
+      // Display toggles
+      document.getElementById('show-album-cover').checked = settings.display?.showAlbumCover || false;
+      document.getElementById('show-progress').checked = settings.display?.showProgress || false;
+      document.getElementById('visualizer-with-lyrics').checked = settings.display?.visualizerWithLyrics || false;
+
+      // Album cover options
+      document.getElementById('album-cover-position').value = settings.display?.albumCoverPosition || 'left';
+      document.getElementById('album-cover-size').value = settings.display?.albumCoverSize || 80;
+      document.getElementById('album-cover-size-val').textContent = `${settings.display?.albumCoverSize || 80}px`;
+      toggleAlbumCoverOptions();
+
+      // Progress options
+      document.getElementById('progress-format').value = settings.display?.progressFormat || 'elapsed';
+      document.getElementById('progress-position').value = settings.display?.progressPosition || 'bottom-right';
+      toggleProgressOptions();
+
+      // Layout
+      document.getElementById('layout-mode').value = settings.display?.layout || 'three-line';
+
+      // Typography
+      document.getElementById('current-font').value = settings.typography?.currentFont || 'Playfair Display';
+      document.getElementById('current-size').value = settings.typography?.currentSize || 32;
+      document.getElementById('current-size-val').textContent = `${settings.typography?.currentSize || 32}px`;
+      document.getElementById('current-weight').value = settings.typography?.currentWeight || 500;
+      document.getElementById('context-font').value = settings.typography?.contextFont || 'DM Sans';
+      document.getElementById('context-size').value = settings.typography?.contextSize || 15;
+      document.getElementById('context-size-val').textContent = `${settings.typography?.contextSize || 15}px`;
+
+      // Advanced
+      document.getElementById('window-opacity').value = settings.window?.opacity || 1;
+      document.getElementById('window-opacity-val').textContent = `${Math.round((settings.window?.opacity || 1) * 100)}%`;
+      document.getElementById('window-position').value = settings.window?.position || 'bottom-center';
+    }
+
+    function toggleAlbumCoverOptions() {
+      const show = document.getElementById('show-album-cover').checked;
+      document.getElementById('album-cover-options').style.display = show ? 'flex' : 'none';
+    }
+
+    function toggleProgressOptions() {
+      const show = document.getElementById('show-progress').checked;
+      document.getElementById('progress-options').style.display = show ? 'flex' : 'none';
+    }
+
+    function saveSettings() {
+      ipcRenderer.send('save-settings', settings);
+    }
+
+    function resetSettings() {
+      if (confirm('Are you sure you want to reset all settings to defaults?')) {
+        ipcRenderer.send('reset-settings');
+      }
+    }
+
+    // Event listeners for controls
+    document.getElementById('anim-duration').addEventListener('input', (e) => {
+      settings.animation.duration = parseInt(e.target.value);
+      document.getElementById('anim-duration-val').textContent = `${e.target.value}ms`;
+      saveSettings();
+    });
+
+    document.getElementById('show-album-cover').addEventListener('change', (e) => {
+      settings.display.showAlbumCover = e.target.checked;
+      toggleAlbumCoverOptions();
+      saveSettings();
+    });
+
+    document.getElementById('album-cover-position').addEventListener('change', (e) => {
+      settings.display.albumCoverPosition = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('album-cover-size').addEventListener('input', (e) => {
+      settings.display.albumCoverSize = parseInt(e.target.value);
+      document.getElementById('album-cover-size-val').textContent = `${e.target.value}px`;
+      saveSettings();
+    });
+
+    document.getElementById('show-progress').addEventListener('change', (e) => {
+      settings.display.showProgress = e.target.checked;
+      toggleProgressOptions();
+      saveSettings();
+    });
+
+    document.getElementById('progress-format').addEventListener('change', (e) => {
+      settings.display.progressFormat = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('progress-position').addEventListener('change', (e) => {
+      settings.display.progressPosition = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('visualizer-with-lyrics').addEventListener('change', (e) => {
+      settings.display.visualizerWithLyrics = e.target.checked;
+      saveSettings();
+    });
+
+    document.getElementById('layout-mode').addEventListener('change', (e) => {
+      settings.display.layout = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('current-font').addEventListener('change', (e) => {
+      settings.typography.currentFont = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('current-size').addEventListener('input', (e) => {
+      settings.typography.currentSize = parseInt(e.target.value);
+      document.getElementById('current-size-val').textContent = `${e.target.value}px`;
+      saveSettings();
+    });
+
+    document.getElementById('current-weight').addEventListener('change', (e) => {
+      settings.typography.currentWeight = parseInt(e.target.value);
+      saveSettings();
+    });
+
+    document.getElementById('context-font').addEventListener('change', (e) => {
+      settings.typography.contextFont = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('context-size').addEventListener('input', (e) => {
+      settings.typography.contextSize = parseInt(e.target.value);
+      document.getElementById('context-size-val').textContent = `${e.target.value}px`;
+      saveSettings();
+    });
+
+    document.getElementById('window-opacity').addEventListener('input', (e) => {
+      settings.window.opacity = parseFloat(e.target.value);
+      document.getElementById('window-opacity-val').textContent = `${Math.round(e.target.value * 100)}%`;
+      saveSettings();
+    });
+
+    document.getElementById('window-position').addEventListener('change', (e) => {
+      settings.window.position = e.target.value;
+      saveSettings();
+    });
+
+    function minimizeWindow() {
+      ipcRenderer.send('minimize-settings');
+    }
+
+    function closeWindow() {
+      ipcRenderer.send('close-settings');
+    }
+
+    // Initial load
+    loadSettings();
+  </script>
+</body>
+</html>

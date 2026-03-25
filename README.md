@@ -34,9 +34,23 @@ Floats over your desktop. Draggable. Click-through when locked.
 - ✅ Repeated line detection — scale ping so you know it's a new instance
 - ✅ Ambient visualizer fallback — plays an abstract animation when no lyrics are found
 - ✅ Auto token refresh — Spotify token silently refreshes, never expires mid-session
+- ✅ Persistent login — Spotify credentials saved locally, no re-auth on restart
 - ✅ Transparent overlay — no background, lyrics float over anything on screen
 - ✅ Draggable + click-through toggle — lock it so clicks pass straight to the desktop
+- ✅ Always-on-top toggle — pin the overlay above all windows or let it stay on desktop
 - ✅ Track info footer — artist and title always visible
+- ✅ **Settings app** — full customization panel with real-time preview
+
+### Settings App Features
+
+- 🎨 **5 Theme Presets** — Warm Amber, Cool Blue, Neon Purple, Minimal Dark, Spotify Green
+- ✨ **5 Animation Styles** — Fade & Slide, Simple Fade, Slide Up, Zoom In, Typewriter
+- 🖼️ **Album Cover Display** — Show album art (left, right, or blurred background)
+- ⏱️ **Song Progress** — Elapsed time, remaining time, or both
+- 🎭 **Typography Controls** — Custom fonts, sizes, and weights
+- 📐 **Layout Options** — Single line, 2-line, or 3-line display
+- 🌊 **Visualizer with Lyrics** — Show ambient animation behind lyrics
+- 💾 **Auto-save** — All settings persist automatically
 
 ---
 
@@ -60,7 +74,9 @@ lyrics-overlay/
 ├── main.js          → Electron main process. Window creation, polling loop, IPC events
 ├── spotify.js       → SpotifyPoller class. OAuth flow, token refresh, getCurrentTrack()
 ├── lyrics.js        → fetchLyrics() from LRCLIB, parseLRC() timestamp parser
+├── config.js        → ConfigManager class. Settings persistence, theme/animation presets
 ├── renderer.html    → The overlay UI. Lyric display, animations, visualizer fallback
+├── settings.html    → Settings panel UI. Theme picker, toggles, sliders
 └── package.json
 ```
 
@@ -73,7 +89,7 @@ lyrics-overlay/
 1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
 2. Click **Create App**
 3. Fill in any name and description
-4. Add `http://localhost:8888/callback` as a **Redirect URI**
+4. Add `http://127.0.0.1:8888/callback` as a **Redirect URI**
 5. Save, then go to **Settings**
 6. Copy your **Client ID** and **Client Secret**
 
@@ -93,7 +109,7 @@ npm install
 npm start
 ```
 
-On first launch, a browser tab opens for Spotify login. Approve it, close the tab, and the overlay appears on your desktop.
+On first launch, a browser tab opens for Spotify login. Approve it, close the tab, and the overlay appears on your desktop. **Subsequent launches skip the login** — your tokens are saved locally.
 
 ---
 
@@ -102,9 +118,17 @@ On first launch, a browser tab opens for Spotify login. Approve it, close the ta
 | Action | How |
 |---|---|
 | Move overlay | Click and drag anywhere |
-| Toggle click-through | Click the 🔓 button (top right) |
-| Lock to desktop | Click 🔓 → becomes 🔒, clicks pass through |
-| Stop the app | Close the window or Ctrl+C in terminal |
+| Toggle click-through | Click 🔓 button or `Ctrl+Shift+L` |
+| Toggle always-on-top | Click 📌 button |
+| Open settings | Click ⚙️ button or `Ctrl+Shift+S` |
+| Stop the app | Close the window or `Ctrl+C` in terminal |
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+L` | Toggle click-through (lock/unlock) |
+| `Ctrl+Shift+S` | Open settings window |
 
 ---
 
@@ -112,11 +136,11 @@ On first launch, a browser tab opens for Spotify login. Approve it, close the ta
 
 ```
 Every 1 second:
-  → Poll Spotify API → get track name, artist, progress_ms
+  → Poll Spotify API → get track name, artist, progress_ms, album art
   → If track changed → fetch lyrics from LRCLIB → parse LRC timestamps
   → Match progress_ms to lyrics array (with -150ms pre-roll)
   → Send { prev, current, next } to renderer via IPC
-  → Renderer animates the line transition
+  → Renderer animates the line transition with current theme/animation
 ```
 
 ### Lyric Sync
@@ -134,25 +158,42 @@ If LRCLIB has no synced lyrics for a track, the lyric display fades out and an a
 
 ## Customization
 
-All visual variables are at the top of `renderer.html`:
+### Using the Settings App
+
+Press `Ctrl+Shift+S` or click the ⚙️ button to open the settings panel. Changes apply in real-time to the overlay.
+
+**Appearance Tab**
+- Choose from 5 color themes
+
+**Animations Tab**
+- Select animation style (fade, slide, zoom, typewriter)
+- Adjust animation duration (100ms - 1000ms)
+
+**Display Tab**
+- Toggle album cover (with position and size options)
+- Toggle song progress (elapsed, remaining, or both)
+- Enable visualizer behind lyrics
+- Choose layout mode (1, 2, or 3 lines)
+
+**Typography Tab**
+- Customize fonts for current and context lines
+- Adjust font sizes and weights
+
+**Advanced Tab**
+- Window opacity
+- Reset all settings to defaults
+
+### Manual CSS Customization
+
+For deeper customization, edit CSS variables in `renderer.html`:
 
 ```css
 :root {
-  --current: rgba(255, 255, 255, 0.95);   /* current line color */
-  --prev-next: rgba(255, 255, 255, 0.35); /* faded lines color */
-  --accent: rgba(255, 200, 120, 0.85);    /* warm accent */
+  --color-current: #fffaf0;              /* current line color */
+  --color-faded: rgba(255, 250, 240, 0.35); /* context lines */
+  --color-accent: #d4a24e;               /* accent color */
 }
 ```
-
-**Window size and position** — edit `createOverlay()` in `main.js`:
-```js
-width: 600,
-height: 200,
-x: ...,   // horizontal position
-y: ...,   // vertical position
-```
-
-**Fonts** — swap the Google Fonts link in `renderer.html` and update the CSS font-family properties.
 
 ---
 
@@ -162,28 +203,36 @@ y: ...,   // vertical position
 | Event | Payload | Description |
 |---|---|---|
 | `lyric-update` | `{ prev, current, next }` | Fires every second while playing |
-| `track-change` | `{ title, artist }` | New song detected |
+| `track-change` | `{ title, artist, albumCover, durationMs }` | New song detected |
+| `progress-update` | `{ progressMs, durationMs }` | Current playback position |
 | `no-track` | — | Nothing playing on Spotify |
 | `no-lyrics` | — | LRCLIB returned no synced lyrics |
+| `settings-updated` | `{ ...settings }` | Settings changed |
+| `clickthrough-changed` | `boolean` | Click-through state changed |
+| `always-on-top-changed` | `boolean` | Always-on-top state changed |
 
 ### renderer → main
 | Event | Payload | Description |
 |---|---|---|
-| `toggle-clickthrough` | `boolean` | Toggles setIgnoreMouseEvents() |
+| `toggle-clickthrough` | — | Toggle click-through mode |
+| `toggle-always-on-top` | — | Toggle always-on-top mode |
+| `open-settings` | — | Open settings window |
 
 ---
 
-## Planned Features
+## Data Storage
 
-- [ ] Album art blur background
-- [ ] Dynamic color theming from album art (node-vibrant)
-- [ ] Playback progress bar
-- [ ] Global hotkeys (play/pause, skip)
-- [ ] Auto-hide on pause
-- [ ] Lyrics cache (local JSON by track ID)
-- [ ] Local music file support (music-metadata)
-- [ ] Settings panel (font, color, opacity, position)
-- [ ] System tray icon
+All user data is stored in your system's app data folder:
+
+| File | Purpose |
+|---|---|
+| `spotify-tokens.json` | Spotify OAuth tokens (auto-refreshed) |
+| `settings.json` | All customization preferences |
+
+**Location:**
+- Windows: `%APPDATA%/lyrics-on-top/`
+- macOS: `~/Library/Application Support/lyrics-on-top/`
+- Linux: `~/.config/lyrics-on-top/`
 
 ---
 
@@ -191,7 +240,7 @@ y: ...,   // vertical position
 
 - Lyrics availability depends on LRCLIB — works great for popular tracks, may miss remixes or obscure songs
 - Spotify free tier works fine for read-only currently-playing data
-- Token refresh is in-memory only — re-authenticates if the app is restarted
+- Album cover requires active Spotify playback
 
 ---
 

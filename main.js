@@ -1,17 +1,20 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
 const SpotifyPoller = require('./spotify');
 const { fetchLyrics, parseLRC } = require('./lyrics');
+const { ConfigManager } = require('./config');
 
 let win;
+let settingsWin;
 let poller;
 let pollingInterval;
+let configManager;
 
 // Current state
 let currentLyrics = [];   // [{ time, text }]
 let currentTrackId = null;
 let hasLyrics = false;
 let isClickThrough = false;
-let isPinned = true;
+let isPinned = false;
 
 function setClickThrough(enabled, skipNotify = false) {
   isClickThrough = enabled;
@@ -49,7 +52,7 @@ function createWindow() {
     y: height - 300,
     transparent: true,
     frame: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: true,
     hasShadow: false,
     resizable: false,
@@ -61,12 +64,7 @@ function createWindow() {
 
   win.loadFile('renderer.html');
   setClickThrough(false, true);
-  setAlwaysOnTop(true, true);
-
-  win.webContents.once('did-finish-load', () => {
-    win.webContents.send('clickthrough-changed', isClickThrough);
-    win.webContents.send('always-on-top-changed', isPinned);
-  });
+  setAlwaysOnTop(false, true);
 }
 
 ipcMain.on('toggle-clickthrough', () => {
@@ -75,6 +73,63 @@ ipcMain.on('toggle-clickthrough', () => {
 
 ipcMain.on('toggle-always-on-top', () => {
   toggleAlwaysOnTop();
+});
+
+// ── Settings Window ─────────────────────────────────
+function createSettingsWindow() {
+  if (settingsWin) {
+    settingsWin.focus();
+    return;
+  }
+
+  settingsWin = new BrowserWindow({
+    width: 680,
+    height: 580,
+    frame: false,
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  settingsWin.loadFile('settings.html');
+
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+  });
+}
+
+ipcMain.on('open-settings', () => {
+  createSettingsWindow();
+});
+
+ipcMain.on('get-settings', (event) => {
+  event.sender.send('settings-data', configManager.getAll());
+});
+
+ipcMain.on('save-settings', (_event, settings) => {
+  configManager.setAll(settings);
+  // Send updated settings to the main overlay window for real-time updates
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('settings-updated', configManager.getAll());
+  }
+});
+
+ipcMain.on('reset-settings', (event) => {
+  configManager.reset();
+  event.sender.send('settings-data', configManager.getAll());
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('settings-updated', configManager.getAll());
+  }
+});
+
+ipcMain.on('minimize-settings', () => {
+  if (settingsWin) settingsWin.minimize();
+});
+
+ipcMain.on('close-settings', () => {
+  if (settingsWin) settingsWin.close();
 });
 
 /**
@@ -109,6 +164,8 @@ async function pollSpotify() {
     win.webContents.send('track-change', {
       title: track.title,
       artist: track.artist,
+      albumCover: track.albumCover,
+      durationMs: track.durationMs,
     });
 
     const lrcString = await fetchLyrics(track.title, track.artist);
@@ -123,6 +180,12 @@ async function pollSpotify() {
     }
   }
 
+  // Send progress update
+  win.webContents.send('progress-update', {
+    progressMs: track.progressMs,
+    durationMs: track.durationMs,
+  });
+
   if (!hasLyrics || currentLyrics.length === 0) return;
 
   const idx = findLineIndex(track.progressMs);
@@ -134,17 +197,35 @@ async function pollSpotify() {
 }
 
 app.whenReady().then(async () => {
+  configManager = new ConfigManager();
   createWindow();
+
+  // Send initial settings to overlay
+  win.webContents.once('did-finish-load', () => {
+    win.webContents.send('clickthrough-changed', isClickThrough);
+    win.webContents.send('always-on-top-changed', isPinned);
+    win.webContents.send('settings-updated', configManager.getAll());
+  });
 
   if (!globalShortcut.register('CommandOrControl+Shift+L', () => toggleClickThrough())) {
     console.warn('[Main] Unable to register Ctrl+Shift+L shortcut for the overlay lock.');
   }
 
+  // Register Ctrl+Shift+S to open settings
+  if (!globalShortcut.register('CommandOrControl+Shift+S', () => createSettingsWindow())) {
+    console.warn('[Main] Unable to register Ctrl+Shift+S shortcut for settings.');
+  }
+
   poller = new SpotifyPoller();
 
   try {
-    await poller.authenticate();
-    console.log('[Main] Spotify authenticated ✓');
+    // Only authenticate if no refresh token exists
+    if (!poller.refreshToken) {
+      await poller.authenticate();
+      console.log('[Main] Spotify authenticated ✓');
+    } else {
+      console.log('[Main] Using saved Spotify tokens');
+    }
     pollingInterval = setInterval(pollSpotify, 1000);
   } catch (err) {
     console.error('[Main] Auth failed:', err.message);

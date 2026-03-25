@@ -1,11 +1,15 @@
 const axios = require('axios');
 const express = require('express');
-const { shell } = require('electron');
+const { shell, app } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
-const CLIENT_ID = 'YOURE_SECRET_ID_HERE'; /**get froim spotify developers portal make sure to add the same redirect url in the spotify developer page as shown here*/
-const CLIENT_SECRET = 'YOUR_SECRET_ID_HERE';
+require('dotenv').config();
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID; // Loaded from .env
+const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET; // Loaded from .env
 const REDIRECT_URI = 'http://127.0.0.1:8888/callback';
 const SCOPES = 'user-read-currently-playing user-read-playback-state';
+const TOKEN_FILE = path.join(app.getPath('userData'), 'spotify-tokens.json');
 
 class SpotifyPoller {
   constructor() {
@@ -13,6 +17,41 @@ class SpotifyPoller {
     this.refreshToken = null;
     this.tokenExpiresAt = 0;
     this.lastTrackId = null;
+    this.loadTokens();
+  }
+
+  /**
+   * Load tokens from local file if they exist
+   */
+  loadTokens() {
+    try {
+      if (fs.existsSync(TOKEN_FILE)) {
+        const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+        this.accessToken = data.accessToken;
+        this.refreshToken = data.refreshToken;
+        this.tokenExpiresAt = data.tokenExpiresAt;
+        console.log('[Spotify] Loaded saved tokens');
+      }
+    } catch (err) {
+      console.error('[Spotify] Failed to load tokens:', err.message);
+    }
+  }
+
+  /**
+   * Save tokens to local file
+   */
+  saveTokens() {
+    try {
+      const data = {
+        accessToken: this.accessToken,
+        refreshToken: this.refreshToken,
+        tokenExpiresAt: this.tokenExpiresAt,
+      };
+      fs.writeFileSync(TOKEN_FILE, JSON.stringify(data, null, 2));
+      console.log('[Spotify] Tokens saved');
+    } catch (err) {
+      console.error('[Spotify] Failed to save tokens:', err.message);
+    }
   }
 
   /**
@@ -55,6 +94,7 @@ class SpotifyPoller {
           this.accessToken = data.access_token;
           this.refreshToken = data.refresh_token;
           this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+          this.saveTokens();
 
           res.send(
             '<h2 style="font-family:sans-serif;color:#1db954">✓ Logged in! You can close this tab.</h2>'
@@ -108,10 +148,11 @@ class SpotifyPoller {
     this.accessToken = data.access_token;
     if (data.refresh_token) this.refreshToken = data.refresh_token;
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+    this.saveTokens();
   }
 
   /**
-   * Returns { title, artist, progressMs, trackId, isPlaying } or null.
+   * Returns { title, artist, progressMs, durationMs, trackId, isPlaying, albumCover } or null.
    */
   async getCurrentTrack() {
     try {
@@ -127,12 +168,20 @@ class SpotifyPoller {
 
       if (status === 204 || !data || !data.item) return null;
 
+      // Get album cover (prefer 300x300 size, fallback to first available)
+      const images = data.item.album?.images || [];
+      const albumCover = images.find(img => img.width === 300)?.url 
+        || images[0]?.url 
+        || null;
+
       return {
         title: data.item.name,
         artist: data.item.artists.map((a) => a.name).join(', '),
         progressMs: data.progress_ms,
+        durationMs: data.item.duration_ms,
         trackId: data.item.id,
         isPlaying: data.is_playing,
+        albumCover,
       };
     } catch (err) {
       console.error('[Spotify] API error:', err.message);
