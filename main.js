@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage } = require('electron');
+const path = require('path');
 const SpotifyPoller = require('./spotify');
 const { fetchLyrics, parseLRC } = require('./lyrics');
 const { ConfigManager } = require('./config');
