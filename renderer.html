@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Lyrics Overlay</title>
+  <title>Lyrics On Top</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -322,6 +322,7 @@
     let currentSettings = {};
     let currentAlbumCover = null;
     let currentDurationMs = 0;
+    let typewriterTimeouts = [];
 
     // ── Settings Application ───────────────────────
     function applySettings(settings) {
@@ -349,16 +350,31 @@
         updateAnimationKeyframes(anim.keyframes);
       }
 
-      // Apply typography
+      // Apply typography & effects
       lyricCurrent.style.fontFamily = `'${typo.currentFont || 'Playfair Display'}', Georgia, serif`;
       lyricCurrent.style.fontSize = `${typo.currentSize || 32}px`;
       lyricCurrent.style.fontWeight = typo.currentWeight || 500;
+      
+      const shadowMode = typo.textShadow || 'soft';
+      if (shadowMode === 'soft') {
+        lyricCurrent.style.textShadow = `0 0 28px ${theme.colorAccentLow || 'rgba(0,0,0,0.5)'}`;
+      } else if (shadowMode === 'strong') {
+        lyricCurrent.style.textShadow = `0px 2px 4px rgba(0,0,0,0.8), 0 0 20px ${theme.colorAccentLow || 'rgba(0,0,0,0.3)'}`;
+      } else {
+        lyricCurrent.style.textShadow = 'none';
+      }
+      
       lyricPrev.style.fontFamily = `'${typo.contextFont || 'DM Sans'}', system-ui, sans-serif`;
       lyricPrev.style.fontSize = `${typo.contextSize || 15}px`;
       lyricNext.style.fontFamily = `'${typo.contextFont || 'DM Sans'}', system-ui, sans-serif`;
       lyricNext.style.fontSize = `${typo.contextSize || 15}px`;
 
-      // Apply layout
+      // Apply layout and alignment
+      lyricsBox.style.alignItems = 
+        display.alignment === 'left' ? 'flex-start' : 
+        display.alignment === 'right' ? 'flex-end' : 'center';
+      lyricsBox.style.textAlign = display.alignment || 'center';
+
       updateLayout(display.layout || 'three-line');
 
       // Apply window opacity
@@ -444,6 +460,46 @@
           progressDisplay.textContent = elapsed;
       }
     }
+    
+    function clearTypewriterTimeouts() {
+      if (typewriterTimeouts && typewriterTimeouts.length) {
+        for (const t of typewriterTimeouts) clearTimeout(t);
+      }
+      typewriterTimeouts = [];
+    }
+
+    function revealTypewriter(text, startTime, endTime, progressMs) {
+      clearTypewriterTimeouts();
+      if (!text) {
+        lyricCurrent.textContent = '';
+        return;
+      }
+      const start = typeof startTime === 'number' ? startTime : 0;
+      const end = typeof endTime === 'number' ? endTime : (currentDurationMs || (start + 2000));
+      const totalMs = Math.max(0, end - start);
+      if (totalMs <= 0) {
+        lyricCurrent.textContent = text;
+        return;
+      }
+      const elapsed = Math.max(0, (typeof progressMs === 'number' ? progressMs : 0) - start);
+      const clampedElapsed = Math.min(elapsed, totalMs);
+      const totalChars = text.length;
+      const initialChars = Math.floor((clampedElapsed / totalMs) * totalChars);
+      lyricCurrent.textContent = text.slice(0, initialChars);
+      const remainingChars = totalChars - initialChars;
+      if (remainingChars <= 0) {
+        lyricCurrent.textContent = text;
+        return;
+      }
+      const remainingMs = totalMs - clampedElapsed;
+      const interval = Math.max(20, remainingMs / remainingChars);
+      for (let i = 0; i < remainingChars; i++) {
+        const to = setTimeout(() => {
+          lyricCurrent.textContent = text.slice(0, initialChars + i + 1);
+        }, Math.round((i + 1) * interval));
+        typewriterTimeouts.push(to);
+      }
+    }
 
     // ── UI Mode Switching ─────────────────────────
     function showLyrics() {
@@ -463,6 +519,7 @@
 
     function showVisualizer() {
       lyricsBox.classList.add('hidden');
+      clearTypewriterTimeouts();
       vizBox.classList.add('visible');
       vizBox.style.opacity = '1';
       vizBox.style.position = 'relative';
@@ -473,6 +530,7 @@
 
     function showIdle() {
       lyricsBox.classList.add('hidden');
+      clearTypewriterTimeouts();
       vizBox.classList.remove('visible');
       idleMsg.classList.add('visible');
       trackInfo.classList.remove('visible');
@@ -532,7 +590,7 @@
       applySettings(settings);
     });
 
-    ipcRenderer.on('lyric-update', (_e, { prev, current, next }) => {
+    ipcRenderer.on('lyric-update', (_e, { prev, current, next, currentIndex, startTime, endTime, progressMs }) => {
       // Only switch back to lyrics mode if we were in visualizer
       if (vizBox.classList.contains('visible') || lyricsBox.classList.contains('hidden')) {
         showLyrics();
@@ -546,8 +604,14 @@
         lyricCurrent.classList.remove('animate-in');
         // Force reflow so the animation restarts
         void lyricCurrent.offsetWidth;
-        lyricCurrent.textContent = current;
-        lyricCurrent.classList.add('animate-in');
+
+        const animStyle = currentSettings.animation?.style || 'fade-slide';
+        if (animStyle === 'typewriter') {
+          revealTypewriter(current, startTime, endTime, progressMs);
+        } else {
+          lyricCurrent.textContent = current;
+          lyricCurrent.classList.add('animate-in');
+        }
       }
     });
 

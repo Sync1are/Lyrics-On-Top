@@ -97,6 +97,7 @@ const DEFAULT_SETTINGS = {
     contextFont: 'DM Sans',
     contextSize: 15,
     contextWeight: 400,
+    textShadow: 'soft', // 'soft', 'strong', 'none'
   },
   display: {
     showVisualizer: false,
@@ -108,12 +109,20 @@ const DEFAULT_SETTINGS = {
     progressFormat: 'elapsed', // 'elapsed', 'remaining', 'both'
     progressPosition: 'bottom-right',
     layout: 'three-line',
+    alignment: 'center', // 'left', 'center', 'right'
+    maxWordsPerLine: 0, // 0 = unlimited
   },
   window: {
     position: 'bottom-center',
     opacity: 1.0,
     width: 800,
     height: 260,
+    x: null,
+    y: null,
+  },
+  system: {
+    startOnBoot: false,
+    latency: 300,
   },
 };
 

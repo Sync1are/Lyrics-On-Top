@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- Soft outer glow (very subtle, premium touch) -->
+  <g opacity="0.08">
+    <path d="M120 190 Q180 150 240 190 T360 190" stroke="#FFFFFF" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M140 240 Q200 200 260 240 T360 240" stroke="#FFFFFF" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M160 290 Q220 250 280 290 T360 290" stroke="#FFFFFF" stroke-width="14" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- Main waveform lines -->
+  <path d="M120 190 Q180 160 240 190 T360 190" stroke="#E6E6E6" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M140 240 Q200 210 260 240 T360 240" stroke="#E6E6E6" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M160 290 Q220 260 280 290 T360 290" stroke="#E6E6E6" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+  <!-- “On top” indicator line -->
+  <rect x="120" y="340" width="272" height="4" rx="2" fill="#E6E6E6" opacity="0.22"/>
+</svg>

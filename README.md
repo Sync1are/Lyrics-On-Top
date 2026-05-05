@@ -70,7 +70,7 @@ Floats over your desktop. Draggable. Click-through when locked.
 ## Project Structure
 
 ```
-lyrics-overlay/
+lyrics-on-top/
 ├── main.js          → Electron main process. Window creation, polling loop, IPC events
 ├── spotify.js       → SpotifyPoller class. OAuth flow, token refresh, getCurrentTrack()
 ├── lyrics.js        → fetchLyrics() from LRCLIB, parseLRC() timestamp parser

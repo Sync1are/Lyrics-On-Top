@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Lyrics Overlay Settings</title>
+  <title>Lyrics On Top Settings</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -447,7 +447,7 @@
 </head>
 <body>
   <div class="title-bar">
-    <h1>⚙️ Lyrics Overlay Settings</h1>
+    <h1>⚙️ Lyrics On Top Settings</h1>
     <div class="title-bar-controls">
       <button class="minimize" onclick="minimizeWindow()">─</button>
       <button class="close" onclick="closeWindow()">✕</button>
@@ -587,6 +587,22 @@
               <option value="two-line">2-Line (Current, Next)</option>
             </select>
           </div>
+          <div class="control-group">
+            <label class="control-label">Text Alignment</label>
+            <select id="text-alignment">
+              <option value="left">Left Aligned</option>
+              <option value="center">Center Aligned</option>
+              <option value="right">Right Aligned</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Max Words Per Line</label>
+            <div class="control-hint">Truncates long lyrics lines to a specific number of words. Set to 0 for unlimited.</div>
+            <div class="range-container">
+              <input type="range" id="max-words" min="0" max="20" step="1" />
+              <span class="range-value" id="max-words-val">0 (Off)</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -640,10 +656,48 @@
             </div>
           </div>
         </div>
+
+        <div class="section">
+          <div class="section-title">Effects</div>
+          <div class="control-group">
+            <label class="control-label">Text Shadow</label>
+            <select id="text-shadow">
+              <option value="none">None</option>
+              <option value="soft">Soft Glow</option>
+              <option value="strong">Strong Outline</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- Advanced Tab -->
       <div id="tab-advanced" class="tab-content">
+        <div class="section">
+          <div class="section-title">Timing & Sync</div>
+          <div class="control-group">
+            <label class="control-label">Lyrics Latency Offset (ms)</label>
+            <div class="control-hint">Adjust if lyrics show too early or too late (negative = delay lyrics, positive = advance lyrics)</div>
+            <div class="range-container">
+              <input type="range" id="latency-offset" min="-3000" max="3000" step="50" />
+              <span class="range-value" id="latency-offset-val">0ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">System</div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Start on Boot</div>
+              <div class="toggle-desc">Automatically launch Lyrics On Top when Windows starts</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="start-on-boot" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="section">
           <div class="section-title">Window</div>
           <div class="control-group">
@@ -808,6 +862,9 @@
 
       // Layout
       document.getElementById('layout-mode').value = settings.display?.layout || 'three-line';
+      document.getElementById('text-alignment').value = settings.display?.alignment || 'center';
+      document.getElementById('max-words').value = settings.display?.maxWordsPerLine || 0;
+      document.getElementById('max-words-val').textContent = settings.display?.maxWordsPerLine ? settings.display.maxWordsPerLine : '0 (Off)';
 
       // Typography
       document.getElementById('current-font').value = settings.typography?.currentFont || 'Playfair Display';
@@ -817,11 +874,15 @@
       document.getElementById('context-font').value = settings.typography?.contextFont || 'DM Sans';
       document.getElementById('context-size').value = settings.typography?.contextSize || 15;
       document.getElementById('context-size-val').textContent = `${settings.typography?.contextSize || 15}px`;
+      document.getElementById('text-shadow').value = settings.typography?.textShadow || 'soft';
 
       // Advanced
       document.getElementById('window-opacity').value = settings.window?.opacity || 1;
       document.getElementById('window-opacity-val').textContent = `${Math.round((settings.window?.opacity || 1) * 100)}%`;
       document.getElementById('window-position').value = settings.window?.position || 'bottom-center';
+      document.getElementById('start-on-boot').checked = settings.system?.startOnBoot || false;
+      document.getElementById('latency-offset').value = settings.system?.latency ?? 300;
+      document.getElementById('latency-offset-val').textContent = `${settings.system?.latency ?? 300}ms`;
     }
 
     function toggleAlbumCoverOptions() {
@@ -894,6 +955,18 @@
       saveSettings();
     });
 
+    document.getElementById('text-alignment').addEventListener('change', (e) => {
+      settings.display.alignment = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('max-words').addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      settings.display.maxWordsPerLine = val;
+      document.getElementById('max-words-val').textContent = val === 0 ? '0 (Off)' : val;
+      saveSettings();
+    });
+
     document.getElementById('current-font').addEventListener('change', (e) => {
       settings.typography.currentFont = e.target.value;
       saveSettings();
@@ -921,6 +994,11 @@
       saveSettings();
     });
 
+    document.getElementById('text-shadow').addEventListener('change', (e) => {
+      settings.typography.textShadow = e.target.value;
+      saveSettings();
+    });
+
     document.getElementById('window-opacity').addEventListener('input', (e) => {
       settings.window.opacity = parseFloat(e.target.value);
       document.getElementById('window-opacity-val').textContent = `${Math.round(e.target.value * 100)}%`;
@@ -929,6 +1007,19 @@
 
     document.getElementById('window-position').addEventListener('change', (e) => {
       settings.window.position = e.target.value;
+      saveSettings();
+    });
+
+    document.getElementById('start-on-boot').addEventListener('change', (e) => {
+      if (!settings.system) settings.system = {};
+      settings.system.startOnBoot = e.target.checked;
+      saveSettings();
+    });
+
+    document.getElementById('latency-offset').addEventListener('input', (e) => {
+      if (!settings.system) settings.system = {};
+      settings.system.latency = parseInt(e.target.value);
+      document.getElementById('latency-offset-val').textContent = `${e.target.value}ms`;
       saveSettings();
     });
 

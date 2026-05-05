@@ -3,10 +3,11 @@ const express = require('express');
 const { shell, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const db = require('./db');
 
 
-const CLIENT_ID = 'CLIENT_ID'; // Loaded from .env
-const CLIENT_SECRET = 'SECRET_CLIENT_ID'; // Loaded from .env
+const CLIENT_ID = ''; // Loaded from .env
+const CLIENT_SECRET = ''; // Loaded from .env
 const REDIRECT_URI = 'http://127.0.0.1:8888/callback';
 const SCOPES = 'user-read-currently-playing user-read-playback-state';
 const TOKEN_FILE = path.join(app.getPath('userData'), 'spotify-tokens.json');
@@ -17,6 +18,7 @@ class SpotifyPoller {
     this.refreshToken = null;
     this.tokenExpiresAt = 0;
     this.lastTrackId = null;
+    this.username = null;
     this.loadTokens();
   }
 
@@ -94,6 +96,25 @@ class SpotifyPoller {
           this.accessToken = data.access_token;
           this.refreshToken = data.refresh_token;
           this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+          // Attempt to fetch the user's profile to obtain a username/id
+          try {
+            const meResp = await axios.get('https://api.spotify.com/v1/me', {
+              headers: { Authorization: `Bearer ${data.access_token}` },
+            });
+            this.username = meResp.data.id || meResp.data.display_name || null;
+
+            if (this.username && this.refreshToken) {
+              try {
+                await db.saveToken(this.username, this.refreshToken);
+                console.log('[Spotify] Saved refresh token to DB for user', this.username);
+              } catch (dbErr) {
+                console.error('[Spotify] Failed to save token to DB:', dbErr.message);
+              }
+            }
+          } catch (meErr) {
+            console.error('[Spotify] Failed to fetch user profile:', meErr.message);
+          }
+
           this.saveTokens();
 
           res.send(
@@ -146,7 +167,18 @@ class SpotifyPoller {
     );
 
     this.accessToken = data.access_token;
-    if (data.refresh_token) this.refreshToken = data.refresh_token;
+    if (data.refresh_token) {
+      this.refreshToken = data.refresh_token;
+      // Update DB if we know the username
+      if (this.username) {
+        try {
+          await db.saveToken(this.username, this.refreshToken);
+          console.log('[Spotify] Updated refresh token in DB for user', this.username);
+        } catch (dbErr) {
+          console.error('[Spotify] Failed to update token in DB:', dbErr.message);
+        }
+      }
+    }
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
     this.saveTokens();
   }
@@ -170,8 +202,8 @@ class SpotifyPoller {
 
       // Get album cover (prefer 300x300 size, fallback to first available)
       const images = data.item.album?.images || [];
-      const albumCover = images.find(img => img.width === 300)?.url 
-        || images[0]?.url 
+      const albumCover = images.find(img => img.width === 300)?.url
+        || images[0]?.url
         || null;
 
       return {

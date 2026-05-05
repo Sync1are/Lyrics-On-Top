@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage } = require('electron');
 const SpotifyPoller = require('./spotify');
 const { fetchLyrics, parseLRC } = require('./lyrics');
 const { ConfigManager } = require('./config');
@@ -8,6 +8,7 @@ let settingsWin;
 let poller;
 let pollingInterval;
 let configManager;
+let tray = null;
 
 // Current state
 let currentLyrics = [];   // [{ time, text }]
@@ -44,22 +45,39 @@ function toggleAlwaysOnTop() {
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const winSettings = configManager.get('window');
+
+  let defaultX = Math.round((width - 800) / 2);
+  let defaultY = height - 300;
 
   win = new BrowserWindow({
-    width: 800,
-    height: 260,
-    x: Math.round((width - 800) / 2),
-    y: height - 300,
+    width: winSettings.width || 800,
+    height: winSettings.height || 260,
+    x: winSettings.x !== null ? winSettings.x : defaultX,
+    y: winSettings.y !== null ? winSettings.y : defaultY,
     transparent: true,
     frame: false,
     alwaysOnTop: false,
     skipTaskbar: true,
     hasShadow: false,
     resizable: false,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
+  });
+
+  win.on('moved', () => {
+    const bounds = win.getBounds();
+    configManager.set('window.x', bounds.x);
+    configManager.set('window.y', bounds.y);
+  });
+
+  win.on('resized', () => {
+    const bounds = win.getBounds();
+    configManager.set('window.width', bounds.width);
+    configManager.set('window.height', bounds.height);
   });
 
   win.loadFile('renderer.html');
@@ -87,6 +105,7 @@ function createSettingsWindow() {
     height: 580,
     frame: false,
     resizable: false,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -110,6 +129,15 @@ ipcMain.on('get-settings', (event) => {
 
 ipcMain.on('save-settings', (_event, settings) => {
   configManager.setAll(settings);
+  
+  // Handle start on boot
+  if (settings.system && settings.system.startOnBoot !== undefined) {
+    app.setLoginItemSettings({
+      openAtLogin: settings.system.startOnBoot,
+      path: app.getPath('exe')
+    });
+  }
+
   // Send updated settings to the main overlay window for real-time updates
   if (win && !win.isDestroyed()) {
     win.webContents.send('settings-updated', configManager.getAll());
@@ -145,6 +173,18 @@ function findLineIndex(progressMs) {
     }
   }
   return idx;
+}
+
+/**
+ * Truncates lyrics to a max number of words if maxWordsPerLine is configured > 0
+ */
+function truncateWords(text, maxWords) {
+  if (!text || maxWords <= 0) return text;
+  const words = text.split(/\s+/);
+  if (words.length > maxWords) {
+    return words.slice(0, maxWords).join(' ') + '...';
+  }
+  return text;
 }
 
 /**
@@ -188,17 +228,65 @@ async function pollSpotify() {
 
   if (!hasLyrics || currentLyrics.length === 0) return;
 
-  const idx = findLineIndex(track.progressMs);
-  const prev = idx > 0 ? currentLyrics[idx - 1].text : '';
-  const current = currentLyrics[idx].text;
-  const next = idx < currentLyrics.length - 1 ? currentLyrics[idx + 1].text : '';
+  const latency = configManager.get('system.latency') ?? 300;
+  const adjustedProgressMs = Math.max(0, track.progressMs + latency);
 
-  win.webContents.send('lyric-update', { prev, current, next });
+  const idx = findLineIndex(adjustedProgressMs);
+  let prev = idx > 0 ? currentLyrics[idx - 1].text : '';
+  let current = currentLyrics[idx].text;
+  let next = idx < currentLyrics.length - 1 ? currentLyrics[idx + 1].text : '';
+  
+  const maxWords = configManager.get('display.maxWordsPerLine') || 0;
+  if (maxWords > 0) {
+    prev = truncateWords(prev, maxWords);
+    current = truncateWords(current, maxWords);
+    next = truncateWords(next, maxWords);
+  }
+
+  const startTime = currentLyrics[idx].time;
+  const endTime = idx < currentLyrics.length - 1 ? currentLyrics[idx + 1].time : track.durationMs;
+
+  win.webContents.send('lyric-update', {
+    prev,
+    current,
+    next,
+    currentIndex: idx,
+    startTime,
+    endTime,
+    progressMs: track.progressMs,
+    durationMs: track.durationMs,
+  });
 }
 
 app.whenReady().then(async () => {
   configManager = new ConfigManager();
   createWindow();
+
+  // Load the new icon from the file system
+  const trayIconPath = path.join(__dirname, 'icon.png');
+  const trayIcon = nativeImage.createFromPath(trayIconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(trayIcon);
+  tray.setToolTip('Lyrics On Top');
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Settings', click: () => createSettingsWindow() },
+    { label: 'Toggle Click-Through', click: () => toggleClickThrough() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { app.quit(); } }
+  ]);
+  tray.setContextMenu(contextMenu);
+  
+  // Double-clicking tray icon opens settings
+  tray.on('double-click', () => createSettingsWindow());
+
+  // Sync login item settings with config
+  const sysSettings = configManager.get('system');
+  if (sysSettings && sysSettings.startOnBoot !== undefined) {
+    app.setLoginItemSettings({
+      openAtLogin: sysSettings.startOnBoot,
+      path: app.getPath('exe')
+    });
+  }
 
   // Send initial settings to overlay
   win.webContents.once('did-finish-load', () => {
